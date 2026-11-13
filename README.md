@@ -26,6 +26,15 @@ exposes a predictable per-user endpoint.
                                              +------------------+
 ```
 
+## What it looks like
+
+![Cloudflare Honeypot dashboard in New Relic](docs/images/dashboard.png)
+
+One hour on a mid-size Discourse forum: 365 probes from 62 source IPs, 334
+distinct usernames, 17 countries. The shape of the traffic is the interesting
+part — the top networks are rented proxies and hosting ranges, not one attacker
+on one machine, which is why blocking a single IP achieves nothing.
+
 ## Why
 
 User-enumeration scans look like this in your logs:
@@ -93,16 +102,8 @@ NEW_RELIC_ENDPOINT: "https://log-api.newrelic.com/log/v1",
 LOG_URL: "",   // optional second sink
 ```
 
-**4. Import the dashboard:**
-
-```bash
-export NEW_RELIC_ACCOUNT_ID=1234567
-export NEW_RELIC_USER_KEY=NRAK-...
-bash scripts/create-dashboard.sh
-```
-
-Or paste `dashboards/newrelic-honeypot.json` into New Relic → Dashboards →
-Import, replacing the `accountId` values and the canary string first.
+**4. Import the dashboard.** Read the next section first — two fields must be
+changed or the import fails.
 
 **5. Test it like a scanner:**
 
@@ -112,6 +113,61 @@ curl -s -H 'Accept: */*' https://forum.example.com/u/nosuchuser999.json | head -
 
 You should get a fake profile with `"_hp"` in it, and a hit in New Relic a minute
 later.
+
+## Importing the dashboard — the two things that trip everyone up
+
+`dashboards/newrelic-honeypot.json` is a dashboard in New Relic's import format.
+It ships with placeholders so it is safe to publish. **Both of these must match
+your setup, or you get a `Failed to create dashboard` / `Schema` error:**
+
+### 1. `accountId` must be your real New Relic account id
+
+The file contains `"accountId": 0` eleven times. Zero is not an account, and the
+import validates it before creating anything — this is the single most common
+failure. Find your id, then replace all eleven:
+
+- **Where to find it:** New Relic → account switcher at the bottom-left (the id
+  is listed next to the account name), or the URL of any page:
+  `one.newrelic.com/accounts/<id>/...`, or Query your data → the account picker.
+
+```bash
+# macOS / Linux
+sed -i 's/"accountId": 0/"accountId": 1234567/g' dashboards/newrelic-honeypot.json
+```
+
+```powershell
+# Windows PowerShell
+(Get-Content dashboards/newrelic-honeypot.json) -replace '"accountId": 0', '"accountId": 1234567' |
+  Set-Content dashboards/newrelic-honeypot.fixed.json
+```
+
+Or skip the editing entirely — the script does the substitution for you:
+
+```bash
+export NEW_RELIC_ACCOUNT_ID=1234567
+export NEW_RELIC_USER_KEY=NRAK-...        # USER key, not a license key
+export HONEYPOT_CANARY=<your CONFIG.CANARY>
+bash scripts/create-dashboard.sh
+```
+
+### 2. The canary in the queries must match your `CONFIG.CANARY`
+
+The widgets filter on `canary = 'honeypot-canary-0001'`, the placeholder value
+from `snippet/honeypot.js`. If you changed `CANARY` in the snippet — you should —
+change it in the dashboard too, all eleven occurrences. Otherwise the dashboard
+imports cleanly and then shows zeros forever, which looks like a broken pipeline.
+
+The `HONEYPOT_CANARY` environment variable above does this in the script path.
+
+### 3. Then, after it imports
+
+- Set the dashboard time range to **7 days**. The default range is often 30
+  minutes, which makes a working dashboard look empty.
+- Permissions: "Edit – everyone in account" if your team should be able to
+  tweak it.
+
+Full walkthrough, including how to bisect an import that still fails:
+[`docs/newrelic.md`](docs/newrelic.md#5-dashboard).
 
 ## How the decision is made
 
@@ -170,21 +226,22 @@ ingest stops (rather than billing) at the cap. A hit is ~400 bytes.
 
 ```
 snippet/honeypot.js              the code
-dashboards/newrelic-honeypot.json 11-widget dashboard
-scripts/create-dashboard.sh      NerdGraph import
+dashboards/newrelic-honeypot.json 11-widget dashboard (placeholder accountId)
+scripts/create-dashboard.sh      NerdGraph import, fills in accountId + canary
 docs/deploy-cloudflare.md        Cloudflare steps, API, rollback, WAF option
-docs/newrelic.md                 license key, queries, alerts, costs
+docs/newrelic.md                 license key, queries, dashboard import, alerts
 docs/discourse.md                Discourse specifics and caveats
-docs/troubleshooting.md          "nothing is logging" checklist
+docs/troubleshooting.md          "nothing is logging" and "import failed" checklists
+docs/images/dashboard.png        screenshot used above
 examples/sample-log.json         one log entry, exactly as sent
 ```
 
 ## Honest status
 
 The snippet logic is unit-tested against mock requests (filter matrix, payload
-shape, sink failure, zero-subrequest path). The dashboard JSON and the NerdGraph
-import script have **not** been run against a live New Relic account — check the
-result after importing and open an issue if the schema drifts.
+shape, sink failure, zero-subrequest path). The dashboard JSON is validated for
+New Relic's 12-column layout and widget schema, and it has been imported into a
+live account; the NerdGraph script has not been run end to end everywhere.
 
 ## License
 
