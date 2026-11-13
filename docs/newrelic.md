@@ -47,10 +47,40 @@ Attributes are what NRQL filters, facets and alerts on.
 
 See `examples/sample-log.json` for the exact payload.
 
-## 4. Queries
+## 4. Two query languages — don't mix them up
 
-Run these in **Query your data** (the full NRQL editor), not the Logs search box
-— that one is fussy about `SINCE` and has its own time picker.
+New Relic has two query boxes with different grammars, and using one in the other
+is the most common time-waster:
+
+| Where you type it | Language | Example |
+| --- | --- | --- |
+| **Logs** → the search bar at the top | Lucene-style log search | `canary:hhf-honeypot-7f21 AND asn:13335` |
+| **Query your data**, dashboard widgets, alert conditions | NRQL | `SELECT count(*) FROM Log WHERE canary = 'hhf-honeypot-7f21'` |
+
+Rules for the Logs search box:
+
+- Attribute values are **case sensitive**; wildcard searches are not.
+- Quote anything containing spaces or special characters, escaping them with `\`.
+- `*` is a wildcard, `-` negates, `has:field` tests for existence.
+- **No aggregations.** No `count(*)`, no `FACET`, no `SINCE` — that is NRQL only.
+
+Handy Logs-box queries for this data:
+
+```
+canary:hhf-honeypot-7f21
+canary:hhf-honeypot-7f21 AND country:US
+canary:hhf-honeypot-7f21 AND ua:*python*
+canary:hhf-honeypot-7f21 AND -ua:*Mozilla*
+canary:hhf-honeypot-7f21 AND asn:13335
+has:canary
+message:"honeypot hit"
+username:oznuruzal
+```
+
+## 5. NRQL queries
+
+Run these in **Query your data** (the full NRQL editor), or drop them into a
+dashboard widget or alert condition.
 
 ```sql
 -- everything, newest first
@@ -67,6 +97,10 @@ FACET ip, as_org, country SINCE 7 days ago LIMIT 50
 SELECT count(*) FROM Log WHERE canary = 'honeypot-canary-0001'
 FACET username SINCE 7 days ago LIMIT 50
 
+-- anything coming from Cloudflare's own network (Workers, WARP, proxies)
+SELECT count(*) FROM Log WHERE canary = 'honeypot-canary-0001' AND asn = 13335
+FACET ip, ua, colo SINCE 7 days ago
+
 -- sanity check: anything that looks like a real browser?
 SELECT count(*) FROM Log WHERE canary = 'honeypot-canary-0001'
 FACET ua, as_org SINCE 7 days ago
@@ -75,7 +109,7 @@ FACET ua, as_org SINCE 7 days ago
 Filter on `canary`, not `event` — the canary value is unique to your trap and
 cannot collide with anything else in the account.
 
-## 5. Dashboard
+## 6. Dashboard
 
 `dashboards/newrelic-honeypot.json` is an eleven-widget dashboard in New Relic's
 import format. It ships with two placeholders that **must** be replaced with your
@@ -164,7 +198,7 @@ Eleven widgets: total hits, unique IPs, usernames probed, countries, hits over
 time, top sources, top networks, source countries, most probed usernames, user
 agents, recent hits.
 
-## 6. Alerts
+## 7. Alerts
 
 Alerts & AI → **Alert policies** → New policy → **Create a condition** → NRQL:
 
@@ -180,7 +214,7 @@ That replaces a Discord ping without the chat noise. Add a second, higher
 threshold (say 200 in 15 minutes) for "something is flooding us" — that is the
 moment to consider the WAF challenge rule.
 
-## 7. Cost
+## 8. Cost
 
 Free tier: 100 GB/month ingest, one full user, unlimited basic users, and ingest
 stops at the cap rather than billing you. A hit is roughly 400 bytes, so the cap
@@ -190,7 +224,7 @@ requests per minute and this sends one request per hit.
 Retention is short (about 8 days by default). If you want a permanent record of
 scanner IPs, export query results periodically or keep a second sink.
 
-## 8. Adding a second sink
+## 9. Adding a second sink
 
 `LOG_URL` (Discord/Slack webhook) can run alongside New Relic, but each sink
 costs a subrequest: two sinks = 2, which is exactly the Pro allowance. On Free
