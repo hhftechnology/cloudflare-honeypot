@@ -1,0 +1,28 @@
+[
+  {
+    "message": "honeypot hit forum.example.com/u/oznuruzal.json | ip 82.108.93.175 | asn 2856 BT Public Internet Service | GB / London | Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+    "timestamp": 1794584635234,
+    "attributes": {
+      "event": "honeypot_hit",
+      "host": "forum.example.com",
+      "path": "/u/oznuruzal.json",
+      "username": "oznuruzal",
+      "query": "",
+      "ip": "82.108.93.175",
+      "asn": 2856,
+      "as_org": "BT Public Internet Service",
+      "country": "GB",
+      "region": "England",
+      "city": "London",
+      "colo": "LHR",
+      "http_protocol": "HTTP/2",
+      "tls_version": "TLSv1.3",
+      "method": "GET",
+      "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+      "accept": "*/*",
+      "accept_language": "",
+      "referer": "",
+      "canary": "honeypot-canary-0001"
+    }
+  }
+]
