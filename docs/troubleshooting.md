@@ -54,11 +54,44 @@ Each sink is independent. Both are attempted and either can fail without
 affecting the other or the fake response — verified by forcing a network
 failure. Compare the two config keys: `LOG_URL` and `NEW_RELIC_LICENSE_KEY`.
 
-## The dashboard is empty
+## Dashboard import fails: `Failed to create dashboard` / Schema
 
-- Set the time range to 7 days. The default 30 minutes is usually empty.
-- `accountId` in the imported JSON must be your account id, not `0`.
-- The canary in the dashboard queries must match `CONFIG.CANARY` exactly.
+The importer validates the JSON before it creates anything, so this is a schema
+problem, not a data problem. In order of likelihood:
+
+1. **`accountId: 0` still in the file.** The dashboard ships with zeros as a
+   placeholder. Zero is not an account and validation rejects it. There are
+   eleven occurrences — replace them all with your own account id (account
+   switcher bottom-left, or `one.newrelic.com/accounts/<id>/…`).
+
+   ```bash
+   sed -i 's/"accountId": 0/"accountId": 1234567/g' dashboards/newrelic-honeypot.json
+   ```
+
+2. **Layout outside the grid.** New Relic uses a 12-column grid: `column` and
+   `width` are 1–12 and `column + width - 1` may not exceed 12. If you edited
+   the layout by hand, this is what broke.
+
+3. **Not a dashboard export.** The top level must be
+   `{name, permissions, pages:[{name, widgets:[…]}]}`. A single widget, or a
+   NerdGraph mutation payload, will not import.
+
+**Bisect it:** import a one-widget dashboard containing only a `viz.markdown`
+widget and no queries at all. If that imports, the wrapper is fine and the
+problem is in the query objects (i.e. `accountId`). If it fails, the wrapper is
+wrong — compare it against `Download dashboard` → JSON from any existing
+dashboard in your account.
+
+**Fallback that cannot fail:** Query your data → run the NRQL → **Add to
+dashboard**. It builds against the live schema instead of a pasted file.
+
+## The dashboard imported but shows zeros
+
+The widgets filter on the canary. If you changed `CANARY` in the snippet (you
+should) and left `honeypot-canary-0001` in the dashboard, every query matches
+nothing. Replace all eleven occurrences of the canary string.
+
+Also check the time range — the default is often 30 minutes. Set it to 7 days.
 
 ## `matches` is rejected by the dashboard
 
