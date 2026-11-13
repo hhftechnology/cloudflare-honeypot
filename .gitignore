@@ -1,0 +1,13 @@
+# secrets and local config
+.env
+.env.*
+*.local
+
+# editor / OS noise
+.DS_Store
+.idea/
+.vscode/
+
+# build output
+*.zip
+node_modules/
