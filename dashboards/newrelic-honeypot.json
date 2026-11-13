@@ -1,6 +1,6 @@
 {
   "name": "Cloudflare Honeypot",
-  "description": "Hits on the /u/*.json fake-profile trap, logged from a Cloudflare Snippet. Replace accountId 0 with your New Relic account id and honeypot-canary-0001 with your CONFIG.CANARY value.",
+  "description": "Hits on the /u/*.json fake-profile trap, logged from a Cloudflare Snippet.",
   "permissions": "PUBLIC_READ_WRITE",
   "pages": [
     {
@@ -9,151 +9,181 @@
       "widgets": [
         {
           "title": "Total hits",
-          "layout": { "column": 1, "row": 1, "width": 6, "height": 3 },
+          "layout": { "column": 1, "row": 1, "width": 3, "height": 3 },
+          "linkedEntityGuids": null,
           "visualization": { "id": "viz.billboard" },
           "rawConfiguration": {
+            "facet": { "showOtherSeries": false },
             "nrqlQueries": [
               {
                 "accountId": 0,
                 "query": "SELECT count(*) FROM Log WHERE canary = 'honeypot-canary-0001'"
               }
             ],
-            "thresholds": []
+            "platformOptions": { "ignoreTimeRange": false }
           }
         },
         {
           "title": "Unique source IPs",
-          "layout": { "column": 7, "row": 1, "width": 6, "height": 3 },
+          "layout": { "column": 4, "row": 1, "width": 3, "height": 3 },
+          "linkedEntityGuids": null,
           "visualization": { "id": "viz.billboard" },
           "rawConfiguration": {
+            "facet": { "showOtherSeries": false },
             "nrqlQueries": [
               {
                 "accountId": 0,
                 "query": "SELECT uniqueCount(ip) FROM Log WHERE canary = 'honeypot-canary-0001'"
               }
             ],
-            "thresholds": []
+            "platformOptions": { "ignoreTimeRange": false }
           }
         },
         {
           "title": "Usernames probed",
-          "layout": { "column": 13, "row": 1, "width": 6, "height": 3 },
+          "layout": { "column": 7, "row": 1, "width": 3, "height": 3 },
+          "linkedEntityGuids": null,
           "visualization": { "id": "viz.billboard" },
           "rawConfiguration": {
+            "facet": { "showOtherSeries": false },
             "nrqlQueries": [
               {
                 "accountId": 0,
                 "query": "SELECT uniqueCount(username) FROM Log WHERE canary = 'honeypot-canary-0001'"
               }
             ],
-            "thresholds": []
+            "platformOptions": { "ignoreTimeRange": false }
           }
         },
         {
           "title": "Countries seen",
-          "layout": { "column": 19, "row": 1, "width": 6, "height": 3 },
+          "layout": { "column": 10, "row": 1, "width": 3, "height": 3 },
+          "linkedEntityGuids": null,
           "visualization": { "id": "viz.billboard" },
           "rawConfiguration": {
+            "facet": { "showOtherSeries": false },
             "nrqlQueries": [
               {
                 "accountId": 0,
                 "query": "SELECT uniqueCount(country) FROM Log WHERE canary = 'honeypot-canary-0001'"
               }
             ],
-            "thresholds": []
+            "platformOptions": { "ignoreTimeRange": false }
           }
         },
         {
           "title": "Hits over time",
-          "layout": { "column": 1, "row": 4, "width": 12, "height": 4 },
+          "layout": { "column": 1, "row": 4, "width": 6, "height": 4 },
+          "linkedEntityGuids": null,
           "visualization": { "id": "viz.line" },
           "rawConfiguration": {
+            "facet": { "showOtherSeries": false },
             "legend": { "enabled": true },
             "nrqlQueries": [
               {
                 "accountId": 0,
                 "query": "SELECT count(*) FROM Log WHERE canary = 'honeypot-canary-0001' TIMESERIES"
               }
-            ]
+            ],
+            "platformOptions": { "ignoreTimeRange": false },
+            "yAxisLeft": { "zero": true }
           }
         },
         {
           "title": "Top sources",
-          "layout": { "column": 13, "row": 4, "width": 12, "height": 4 },
+          "layout": { "column": 7, "row": 4, "width": 6, "height": 4 },
+          "linkedEntityGuids": null,
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
+            "facet": { "showOtherSeries": false },
             "nrqlQueries": [
               {
                 "accountId": 0,
                 "query": "SELECT count(*) FROM Log WHERE canary = 'honeypot-canary-0001' FACET ip, as_org, country LIMIT 20"
               }
-            ]
+            ],
+            "platformOptions": { "ignoreTimeRange": false }
           }
         },
         {
           "title": "Top networks (ASN)",
-          "layout": { "column": 1, "row": 8, "width": 8, "height": 4 },
+          "layout": { "column": 1, "row": 8, "width": 4, "height": 4 },
+          "linkedEntityGuids": null,
           "visualization": { "id": "viz.bar" },
           "rawConfiguration": {
+            "facet": { "showOtherSeries": false },
             "nrqlQueries": [
               {
                 "accountId": 0,
                 "query": "SELECT count(*) FROM Log WHERE canary = 'honeypot-canary-0001' FACET as_org LIMIT 15"
               }
-            ]
+            ],
+            "platformOptions": { "ignoreTimeRange": false }
           }
         },
         {
           "title": "Source countries",
-          "layout": { "column": 9, "row": 8, "width": 8, "height": 4 },
+          "layout": { "column": 5, "row": 8, "width": 4, "height": 4 },
+          "linkedEntityGuids": null,
           "visualization": { "id": "viz.pie" },
           "rawConfiguration": {
+            "facet": { "showOtherSeries": false },
             "legend": { "enabled": true },
             "nrqlQueries": [
               {
                 "accountId": 0,
                 "query": "SELECT count(*) FROM Log WHERE canary = 'honeypot-canary-0001' FACET country LIMIT 15"
               }
-            ]
+            ],
+            "platformOptions": { "ignoreTimeRange": false }
           }
         },
         {
           "title": "Most probed usernames",
-          "layout": { "column": 17, "row": 8, "width": 8, "height": 4 },
+          "layout": { "column": 9, "row": 8, "width": 4, "height": 4 },
+          "linkedEntityGuids": null,
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
+            "facet": { "showOtherSeries": false },
             "nrqlQueries": [
               {
                 "accountId": 0,
                 "query": "SELECT count(*) FROM Log WHERE canary = 'honeypot-canary-0001' FACET username LIMIT 25"
               }
-            ]
+            ],
+            "platformOptions": { "ignoreTimeRange": false }
           }
         },
         {
           "title": "User agents",
-          "layout": { "column": 1, "row": 12, "width": 12, "height": 4 },
+          "layout": { "column": 1, "row": 12, "width": 6, "height": 4 },
+          "linkedEntityGuids": null,
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
+            "facet": { "showOtherSeries": false },
             "nrqlQueries": [
               {
                 "accountId": 0,
                 "query": "SELECT count(*) FROM Log WHERE canary = 'honeypot-canary-0001' FACET ua LIMIT 20"
               }
-            ]
+            ],
+            "platformOptions": { "ignoreTimeRange": false }
           }
         },
         {
           "title": "Recent hits",
-          "layout": { "column": 13, "row": 12, "width": 12, "height": 4 },
+          "layout": { "column": 7, "row": 12, "width": 6, "height": 4 },
+          "linkedEntityGuids": null,
           "visualization": { "id": "viz.table" },
           "rawConfiguration": {
+            "facet": { "showOtherSeries": false },
             "nrqlQueries": [
               {
                 "accountId": 0,
                 "query": "SELECT timestamp, ip, asn, as_org, country, username, path, ua FROM Log WHERE canary = 'honeypot-canary-0001' LIMIT 50"
               }
-            ]
+            ],
+            "platformOptions": { "ignoreTimeRange": false }
           }
         }
       ]
