@@ -77,24 +77,92 @@ cannot collide with anything else in the account.
 
 ## 5. Dashboard
 
-Either import `dashboards/newrelic-honeypot.json` (Dashboards → Import, after
-replacing `accountId` and the canary string), or create it from the script:
+`dashboards/newrelic-honeypot.json` is an eleven-widget dashboard in New Relic's
+import format. It ships with two placeholders that **must** be replaced with your
+own values. Miss either and you either get an import error or a dashboard that
+shows zeros forever.
+
+| Placeholder | Replace with | Where it appears |
+| --- | --- | --- |
+| `"accountId": 0` | your New Relic account id | 11 query objects |
+| `honeypot-canary-0001` | your `CONFIG.CANARY` from the snippet | 11 query filters |
+
+### Find your account id
+
+Any of these:
+
+- The **account switcher** at the bottom-left of New Relic lists the id next to
+  the account name.
+- The URL of almost any page: `one.newrelic.com/accounts/<id>/…`.
+- **Query your data** → the account picker shows it.
+- An existing dashboard → `...` → **Download dashboard** → JSON → `accountId`.
+
+### Option A — the script (recommended, no editing)
 
 ```bash
 export NEW_RELIC_ACCOUNT_ID=1234567
-export NEW_RELIC_USER_KEY=NRAK-...
-export HONEYPOT_CANARY=honeypot-canary-0001   # optional
+export NEW_RELIC_USER_KEY=NRAK-...          # a USER key, not a license key
+export HONEYPOT_CANARY=hhf-honeypot-7f21   # your CONFIG.CANARY
 bash scripts/create-dashboard.sh
 ```
 
-The script uses NerdGraph (`dashboardCreate`) and needs a **user** key, not a
-license key. EU accounts: also export
-`NERDGRAPH_ENDPOINT=https://api.eu.newrelic.com/graphql`.
+It rewrites both placeholders and calls NerdGraph `dashboardCreate`. EU accounts:
+also export `NERDGRAPH_ENDPOINT=https://api.eu.newrelic.com/graphql`. Each run
+creates a new dashboard, so delete the previous one while iterating.
+
+### Option B — the UI import, after editing the JSON
+
+```bash
+# macOS / Linux
+sed -i -e 's/"accountId": 0/"accountId": 1234567/g' \
+       -e 's/honeypot-canary-0001/hhf-honeypot-7f21/g' \
+       dashboards/newrelic-honeypot.json
+```
+
+```powershell
+# Windows PowerShell
+(Get-Content dashboards/newrelic-honeypot.json) `
+  -replace '"accountId": 0', '"accountId": 1234567' `
+  -replace 'honeypot-canary-0001', 'hhf-honeypot-7f21' |
+  Set-Content dashboards/newrelic-honeypot.fixed.json
+```
+
+Then: **Dashboards → Import dashboard → paste → Permissions "Edit – everyone in
+account" → Import.**
+
+### After it imports
+
+- Set the time range to **7 days** (top right). The default is often 30 minutes,
+  which makes a working dashboard look empty.
+- If the widgets show numbers but the charts look sparse, that is just log
+  volume — a few hundred probes a day is normal.
+
+### If the import fails
+
+`Failed to create dashboard` with a **Schema** tag is validation, not a data
+problem. In order of likelihood:
+
+1. **`accountId: 0` left in place.** Zero is not an account; the import validates
+   it before creating anything. Replace all eleven.
+2. **Layout outside the grid.** New Relic's dashboard grid is 12 columns wide and
+   a widget's `column + width - 1` may not exceed 12. If you hand-edited the
+   layout, check it.
+3. **Wrong JSON shape.** The importer expects a dashboard export, not a widget or
+   a NerdGraph mutation payload. The top level must be
+   `{name, permissions, pages:[{widgets:[…]}]}`.
+
+To bisect: import a one-widget dashboard with a `viz.markdown` widget and no
+queries at all. If that succeeds, the wrapper is fine and the problem is in the
+query objects (i.e. `accountId`). If it fails, the wrapper is wrong — compare
+against `Download dashboard` from any existing dashboard in your account.
+
+Fallback that cannot fail: **Query your data** → run
+`SELECT count(*) FROM Log WHERE canary = '<your canary>' TIMESERIES` → **Add to
+dashboard**. Repeat per widget. Slower, but it builds against the live schema.
 
 Eleven widgets: total hits, unique IPs, usernames probed, countries, hits over
 time, top sources, top networks, source countries, most probed usernames, user
-agents, recent hits. Set the dashboard time range to 7 days — the default 30
-minutes will usually be empty.
+agents, recent hits.
 
 ## 6. Alerts
 
