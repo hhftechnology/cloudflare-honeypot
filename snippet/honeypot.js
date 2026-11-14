@@ -111,14 +111,32 @@ function fakeProfile(username, host) {
   };
 }
 
-let avatarBytes = null;
-function getAvatarBytes() {
-  if (!avatarBytes) {
-    const bin = atob(AVATAR_PNG_B64);
-    avatarBytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) avatarBytes[i] = bin.charCodeAt(i);
+// Minimal base64 decoder. Deliberately avoids atob so the snippet runs on the
+// most conservative Snippets runtime, and avoids module-level mutable state.
+const B64_ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+function b64ToBytes(b64) {
+  const clean = b64.replace(/[^A-Za-z0-9+/]/g, "");
+  const out = new Uint8Array(Math.floor((clean.length * 3) / 4));
+  let written = 0;
+  let buffer = 0;
+  let bits = 0;
+
+  for (let i = 0; i < clean.length; i++) {
+    buffer = (buffer << 6) | B64_ALPHABET.indexOf(clean[i]);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out[written++] = (buffer >> bits) & 0xff;
+    }
   }
-  return avatarBytes;
+
+  return out.subarray(0, written);
+}
+
+function getAvatarBytes() {
+  return b64ToBytes(AVATAR_PNG_B64);
 }
 
 function looksLikeRealVisitor(request, host) {
@@ -245,7 +263,6 @@ export default {
         status: 200,
         headers: {
           "content-type": "image/png",
-          "content-length": String(getAvatarBytes().length),
           "cache-control": "no-store",
           "x-honeypot": CONFIG.CANARY,
         },
