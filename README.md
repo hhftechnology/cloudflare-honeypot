@@ -231,6 +231,8 @@ ingest stops (rather than billing) at the cap. A hit is ~400 bytes.
 ## Tests
 
 ```bash
+npm install
+npm run typecheck      # the same check the Cloudflare Snippets editor runs
 npm test               # both suites
 npm run test:snippet   # snippet behaviour
 npm run test:dashboard # dashboard schema
@@ -248,8 +250,15 @@ failing sink never breaks the trap), and that no probe costs the origin anything
 widget, one consistent canary, one consistent `accountId`, and that the committed
 file still uses the `accountId: 0` / `honeypot-canary-0001` placeholders.
 
-CI runs both on Node 20 and 22 for every push to `main` and every pull request,
-plus a JSON parse check and a guard that no real account id is ever committed.
+`npm run typecheck` runs TypeScript over the snippet with `--checkJs --strict`.
+The Cloudflare Snippets editor does the same thing and reports untyped parameters
+as `ts(7044)` in the UI, which looks like a validation error but is only a hint.
+Every function in the snippet carries JSDoc annotations, so the editor is quiet —
+and CI fails if someone adds an untyped parameter later.
+
+CI runs all of it on Node 20 and 22 for every push to `main` and every pull
+request, plus a JSON parse check and a guard that no real account id is ever
+committed.
 
 ## Repo layout
 
@@ -258,7 +267,7 @@ snippet/honeypot.js              the code (both traps)
 dashboards/newrelic-honeypot.json 11-widget dashboard (placeholder accountId)
 scripts/create-dashboard.sh      NerdGraph import, fills in accountId + canary
 tests/                           snippet and dashboard test suites
-.github/workflows/ci.yml         CI: syntax, tests, placeholder guard
+.github/workflows/ci.yml         CI: typecheck, tests, placeholder guard
 docs/deploy-cloudflare.md        Cloudflare steps, API, rollback, WAF option
 docs/newrelic.md                 license key, queries, dashboard import, alerts
 docs/discourse.md                Discourse specifics and caveats
@@ -269,10 +278,11 @@ examples/sample-log.json         one log entry, exactly as sent
 
 ## Honest status
 
-The snippet logic is unit-tested against mock requests (filter matrix, payload
-shape, sink failure, zero-subrequest path). The dashboard JSON is validated in CI
-against New Relic's 12-column layout and widget schema, and it has been imported
-into a live account; the NerdGraph script has not been run end to end everywhere.
+The snippet is type-checked and unit-tested against mock requests (filter
+matrix, payload shape, sink failure, zero-subrequest path). The dashboard JSON is
+validated in CI against New Relic's 12-column layout and widget schema, and it
+has been imported into a live account; the NerdGraph script has not been run end
+to end everywhere.
 
 ## License
 
