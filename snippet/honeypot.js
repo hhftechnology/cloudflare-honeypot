@@ -14,6 +14,17 @@
  * LIMITS THIS RESPECTS
  *   5 ms CPU, 2 MB memory, 32 KB package, no KV, no bindings, no environment
  *   variables - every setting lives inline in CONFIG below.
+ *
+ * NOTE ON TYPES
+ *   This is plain JavaScript, but the Cloudflare Snippets editor type-checks it
+ *   and flags untyped parameters (ts(7044)). Every function below carries JSDoc
+ *   annotations so that check is clean - `npm run typecheck` runs the same check
+ *   locally and in CI.
+ */
+
+/**
+ * A Request, plus the `cf` object Cloudflare attaches to it.
+ * @typedef {Request & { cf?: Record<string, any> }} SnippetRequest
  */
 
 const CONFIG = {
@@ -61,6 +72,11 @@ const AVATAR_PNG_B64 =
 
 /* ---------- helpers ---------- */
 
+/**
+ * FNV-1a. Deterministic, so the same username always gets the same fake id.
+ * @param {string} s
+ * @returns {number}
+ */
 function hash32(s) {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
@@ -70,14 +86,29 @@ function hash32(s) {
   return h >>> 0;
 }
 
-function prettyName(username) {
-  return username
-    .replace(/[._-]+/g, " ")
-    .replace(/\b[a-z]/g, (c) => c.toUpperCase());
+/**
+ * @param {string} c
+ * @returns {string}
+ */
+function upperFirst(c) {
+  return c.toUpperCase();
 }
 
-// Deterministic per username, so a bot that comes back for the same name sees a
-// stable profile and cannot tell it is being fed garbage.
+/**
+ * @param {string} username
+ * @returns {string}
+ */
+function prettyName(username) {
+  return username.replace(/[._-]+/g, " ").replace(/\b[a-z]/g, upperFirst);
+}
+
+/**
+ * Deterministic per username, so a bot that comes back for the same name sees a
+ * stable profile and cannot tell it is being fed garbage.
+ * @param {string} username
+ * @param {string} host
+ * @returns {object}
+ */
 function fakeProfile(username, host) {
   const h = hash32(username.toLowerCase());
   const id = 1000 + (h % 90000);
@@ -85,6 +116,8 @@ function fakeProfile(username, host) {
   const year = 2015 + (h % 9);
   const month = 1 + (h % 12);
   const day = 1 + (h % 27);
+
+  /** @type {(n: number) => string} */
   const pad = (n) => String(n).padStart(2, "0");
 
   return {
@@ -116,6 +149,10 @@ function fakeProfile(username, host) {
 const B64_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
+/**
+ * @param {string} b64
+ * @returns {Uint8Array}
+ */
 function b64ToBytes(b64) {
   const clean = b64.replace(/[^A-Za-z0-9+/]/g, "");
   const out = new Uint8Array(Math.floor((clean.length * 3) / 4));
@@ -132,13 +169,22 @@ function b64ToBytes(b64) {
     }
   }
 
-  return out.subarray(0, written);
+  return written === out.length ? out : out.slice(0, written);
 }
 
+/**
+ * @returns {Uint8Array}
+ */
 function getAvatarBytes() {
   return b64ToBytes(AVATAR_PNG_B64);
 }
 
+/**
+ * Everything a real client sends, a script does not.
+ * @param {SnippetRequest} request
+ * @param {string} host
+ * @returns {boolean}
+ */
 function looksLikeRealVisitor(request, host) {
   const h = request.headers;
 
@@ -158,11 +204,19 @@ function looksLikeRealVisitor(request, host) {
   return false;
 }
 
-// One log entry per hit, shaped for the New Relic Log API: an array of log
-// objects, each with message / timestamp / attributes. Attribute names become
-// queryable NRQL fields.
+/**
+ * One log entry per hit, shaped for the New Relic Log API: an array of log
+ * objects, each with message / timestamp / attributes. Attribute names become
+ * queryable NRQL fields.
+ * @param {SnippetRequest} request
+ * @param {URL} url
+ * @param {"profile" | "avatar"} trap
+ * @param {string} username
+ * @returns {Promise<void>}
+ */
 async function logHit(request, url, trap, username) {
   const h = request.headers;
+  /** @type {Record<string, any>} */
   const cf = request.cf || {};
   const hit = {
     event: "honeypot_hit",
@@ -195,6 +249,7 @@ async function logHit(request, url, trap, username) {
     `asn ${hit.asn} ${hit.as_org} | ${hit.country}${hit.city ? " / " + hit.city : ""} | ` +
     `${hit.ua || "no user-agent"}`;
 
+  /** @type {Promise<Response>[]} */
   const jobs = [];
 
   if (CONFIG.NEW_RELIC_LICENSE_KEY) {
@@ -229,6 +284,10 @@ async function logHit(request, url, trap, username) {
 /* ---------- the snippet ---------- */
 
 export default {
+  /**
+   * @param {SnippetRequest} request
+   * @returns {Promise<Response>}
+   */
   async fetch(request) {
     const url = new URL(request.url);
     const host = url.hostname;
@@ -259,7 +318,9 @@ export default {
       if (CONFIG.NEW_RELIC_LICENSE_KEY || CONFIG.LOG_URL) {
         await logHit(request, url, "avatar", "");
       }
-      return new Response(getAvatarBytes(), {
+      // The Workers runtime accepts a Uint8Array body; the DOM typings for
+      // BodyInit do not list typed arrays, hence the cast.
+      return new Response(/** @type {any} */ (getAvatarBytes()), {
         status: 200,
         headers: {
           "content-type": "image/png",
@@ -268,6 +329,8 @@ export default {
         },
       });
     }
+
+    if (!profileMatch) return fetch(request);
 
     let username = profileMatch[1];
     try {
