@@ -1,0 +1,17 @@
+{
+  "name": "cloudflare-honeypot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Snippet honeypot for user-enumeration scans, with a New Relic dashboard",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "lint": "node --check snippet/honeypot.js",
+    "test": "node --test tests/",
+    "test:snippet": "node --test tests/snippet.test.mjs",
+    "test:dashboard": "node --test tests/dashboard.test.mjs"
+  }
+}
