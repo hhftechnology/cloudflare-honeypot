@@ -10,8 +10,12 @@
   },
   "scripts": {
     "lint": "node --check snippet/honeypot.js",
+    "typecheck": "tsc --noEmit --allowJs --checkJs --strict --target es2022 --module esnext --moduleResolution bundler snippet/honeypot.js",
     "test": "node --test tests/",
     "test:snippet": "node --test tests/snippet.test.mjs",
     "test:dashboard": "node --test tests/dashboard.test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
   }
 }
