@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20", "22"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Syntax check the snippet
+        run: node --check snippet/honeypot.js
+
+      - name: Validate the dashboard JSON
+        run: npm run test:dashboard
+
+      - name: Test the snippet behaviour
+        run: npm run test:snippet
+
+      - name: Check JSON examples parse
+        run: |
+          for f in $(git ls-files '*.json'); do
+            node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" || exit 1
+            echo "ok $f"
+          done
+
+      - name: Check the public repo carries no real identifiers
+        run: |
+          if git grep -nE '"accountId": *[1-9][0-9]*' -- 'dashboards/*.json'; then
+            echo "::error::dashboards/newrelic-honeypot.json must ship with accountId 0"
+            exit 1
+          fi
+          echo "no real account ids committed"
