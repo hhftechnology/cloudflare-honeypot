@@ -1,5 +1,7 @@
 # cloudflare-honeypot
 
+![CI](https://github.com/hhftechnology/cloudflare-honeypot/actions/workflows/ci.yml/badge.svg)
+
 Turn a user-enumeration endpoint into a trap. A small Cloudflare Snippet answers
 scanner probes with a believable **fake** user profile, logs who asked, and never
 touches your origin server.
@@ -63,6 +65,9 @@ a detailed log line behind. Your origin sees nothing.
   a confirmed scanner.
 - **A canary.** Every fake profile contains a marker string and a fake email
   address, so anything harvested can be traced back to your trap.
+- **Two traps.** `/u/<name>.json` returns a fabricated profile; `/user_avatar/…`
+  returns a real PNG, because scanners follow the `avatar_template` in that
+  profile and a 404 there would give the game away.
 - **Structured logs** in New Relic (or Discord/Slack): IP, ASN, network, country,
   city, edge colo, HTTP/TLS version, user agent, accept headers, referer,
   username probed.
@@ -76,14 +81,12 @@ a detailed log line behind. Your origin sees nothing.
 // paste snippet/honeypot.js, then set CANARY and your sink in CONFIG
 ```
 
-**2. Add the snippet rule** — a snippet does nothing until a rule matches it:
-
-| Field | Operator | Value |
-| --- | --- | --- |
-| URI Path | wildcard | `/u/*.json` |
+**2. Add the snippet rule** — a snippet does nothing until a rule matches it, and
+one snippet takes only one rule, so cover both traps:
 
 ```
-(http.request.uri.path wildcard "/u/*.json")
+(http.request.uri.path wildcard "/u/*.json"
+ or http.request.uri.path wildcard "/user_avatar/*")
 ```
 
 Use **URI Path**, not URI Full — `full_uri` includes the query string, so
@@ -108,11 +111,12 @@ changed or the import fails.
 **5. Test it like a scanner:**
 
 ```bash
-curl -s -H 'Accept: */*' https://forum.example.com/u/nosuchuser999.json | head -c 300
+curl -s -H 'Accept: application/json' https://forum.example.com/u/nosuchuser999.json | head -c 300
+curl -s -o /dev/null -D - -H 'Accept: */*' https://forum.example.com/user_avatar/forum.example.com/ | grep -i x-honeypot
 ```
 
-You should get a fake profile with `"_hp"` in it, and a hit in New Relic a minute
-later.
+You should get a fake profile with `"_hp"` in it, an `image/png` response from
+the second, and a hit in New Relic a minute later.
 
 ## Importing the dashboard — the two things that trip everyone up
 
@@ -167,7 +171,7 @@ The `HONEYPOT_CANARY` environment variable above does this in the script path.
   tweak it.
 
 Full walkthrough, including how to bisect an import that still fails:
-[`docs/newrelic.md`](docs/newrelic.md#5-dashboard).
+[`docs/newrelic.md`](docs/newrelic.md#6-dashboard).
 
 ## How the decision is made
 
@@ -190,6 +194,8 @@ right way to test.
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `CANARY` | `honeypot-canary-0001` | Marker inside every fake response. Change it. |
+| `PROFILE_TRAP` | `true` | Trap `/u/<name>.json` with a fake profile. |
+| `AVATAR_TRAP` | `true` | Trap `/user_avatar/…` with a placeholder PNG. |
 | `SESSION_COOKIES` | Discourse names | Cookies that mean "real visitor". |
 | `NEW_RELIC_LICENSE_KEY` | `""` | Ingest license key. Empty disables. |
 | `NEW_RELIC_ENDPOINT` | US | US / EU / JP Log API endpoint. |
@@ -222,12 +228,37 @@ environment variables. This snippet uses a fraction of that and one subrequest.
 New Relic free tier: 100 GB/month ingest, 1 full user, unlimited basic users, and
 ingest stops (rather than billing) at the cap. A hit is ~400 bytes.
 
+## Tests
+
+```bash
+npm test               # both suites
+npm run test:snippet   # snippet behaviour
+npm run test:dashboard # dashboard schema
+```
+
+`tests/snippet.test.mjs` loads the real `snippet/honeypot.js`, rewrites a
+`CONFIG` value where a test needs a different setting, and runs it against mocked
+requests and a mocked `fetch`. It covers the filter matrix (session cookie,
+referer, `text/html`, API key all pass through), the fake profile's shape and
+determinism, the avatar PNG's signature, sink behaviour (one entry per hit, a
+failing sink never breaks the trap), and that no probe costs the origin anything.
+
+`tests/dashboard.test.mjs` enforces the rules New Relic applies on import: the
+12-column grid, no overlapping widgets, a `viz.*` visualisation and NRQL on every
+widget, one consistent canary, one consistent `accountId`, and that the committed
+file still uses the `accountId: 0` / `honeypot-canary-0001` placeholders.
+
+CI runs both on Node 20 and 22 for every push to `main` and every pull request,
+plus a JSON parse check and a guard that no real account id is ever committed.
+
 ## Repo layout
 
 ```
-snippet/honeypot.js              the code
+snippet/honeypot.js              the code (both traps)
 dashboards/newrelic-honeypot.json 11-widget dashboard (placeholder accountId)
 scripts/create-dashboard.sh      NerdGraph import, fills in accountId + canary
+tests/                           snippet and dashboard test suites
+.github/workflows/ci.yml         CI: syntax, tests, placeholder guard
 docs/deploy-cloudflare.md        Cloudflare steps, API, rollback, WAF option
 docs/newrelic.md                 license key, queries, dashboard import, alerts
 docs/discourse.md                Discourse specifics and caveats
@@ -239,9 +270,9 @@ examples/sample-log.json         one log entry, exactly as sent
 ## Honest status
 
 The snippet logic is unit-tested against mock requests (filter matrix, payload
-shape, sink failure, zero-subrequest path). The dashboard JSON is validated for
-New Relic's 12-column layout and widget schema, and it has been imported into a
-live account; the NerdGraph script has not been run end to end everywhere.
+shape, sink failure, zero-subrequest path). The dashboard JSON is validated in CI
+against New Relic's 12-column layout and widget schema, and it has been imported
+into a live account; the NerdGraph script has not been run end to end everywhere.
 
 ## License
 
