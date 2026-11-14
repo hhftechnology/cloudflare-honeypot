@@ -1,10 +1,15 @@
 /**
  * cloudflare-honeypot - fake-profile trap for user enumeration scans
- * Cloudflare Snippet (Rules -> Snippets). One snippet slot.
+ * Cloudflare Snippet (Rules -> Snippets). One snippet slot, two traps:
  *
- * Any request to /u/<name>.json that no real client would make gets a 200 with
- * a believable but entirely fake profile. Real visitors are passed through to
- * the origin untouched, and the origin never sees a probe.
+ *   1. /u/<name>.json      -> 200 with a fabricated user profile (JSON)
+ *   2. /user_avatar/...    -> 200 with a placeholder PNG
+ *
+ * Trap 2 exists because scanners follow the avatar_template that trap 1 hands
+ * them. Seeing /user_avatar/<host>/ in your logs is proof the poisoned profiles
+ * are being consumed.
+ *
+ * Real visitors are passed through untouched, and the origin never sees a probe.
  *
  * LIMITS THIS RESPECTS
  *   5 ms CPU, 2 MB memory, 32 KB package, no KV, no bindings, no environment
@@ -16,6 +21,13 @@ const CONFIG = {
   // Change it to something unique to you, then grep your logs (or the web) for
   // it to see where the poisoned data ended up.
   CANARY: "honeypot-canary-0001",
+
+  // ---- Trap 1: fake user profile JSON ----
+  PROFILE_TRAP: true,
+  // ---- Trap 2: placeholder avatar image ----
+  // Scanners that fetch the avatar_template from a fake profile get a real PNG
+  // instead of a 404, so they cannot tell the profile was fake.
+  AVATAR_TRAP: true,
 
   // ---- Where hits go. Both sinks are optional and independent. ----
   // Each one costs a subrequest: Pro allows 2, Business 3, Free 0.
@@ -33,20 +45,19 @@ const CONFIG = {
   // LEAVE THIS OFF. Turning it on sends one request to your origin for every
   // probe - exactly the load this trap exists to remove. With it off, matched
   // traffic is answered at Cloudflare's edge and your server never sees it.
-  //
-  // If you do enable it: it needs snippet subrequests (Pro+), and the snippet
-  // rule expression must exclude the probe marker or the subrequest will loop.
   PROBE_ORIGIN: false,
 
   // Cookies that mean "this is a real visitor, leave them alone".
   // Discourse sets _forum_session for anonymous visitors too, so this alone
   // excludes every real browser. XenForo: xf_session, xf_user.
-  // WordPress: wordpress_logged_in_*, woocommerce_items_in_cart.
   SESSION_COOKIES: ["_forum_session", "_t"],
 
-  // Response headers for the fake profile.
   CONTENT_TYPE: "application/json; charset=utf-8",
 };
+
+// 96x96 PNG placeholder, 226 bytes. Served for avatar probes.
+const AVATAR_PNG_B64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAAAqUlEQVR42u3dsQ2AQAhA0fPiQIxN6SiMdAVWJppY3/sN/QvUHJnX0HsTwXdnj6pi8SgibJATAwQIECBAgAAJECBAgAABAgRIgAABAgQIECBAAgQIECBAgAABAiRAgAABAgQIECABAgQIECBAgAAJECBAgAABAgQIkAABAgQIECBAgAQIECBAgAABAiRAgAABAgQIECBAAgQIECBAgADt2P3bp//YyAb9bgGuRwZUuuftFQAAAABJRU5ErkJggg==";
 
 /* ---------- helpers ---------- */
 
@@ -100,6 +111,16 @@ function fakeProfile(username, host) {
   };
 }
 
+let avatarBytes = null;
+function getAvatarBytes() {
+  if (!avatarBytes) {
+    const bin = atob(AVATAR_PNG_B64);
+    avatarBytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) avatarBytes[i] = bin.charCodeAt(i);
+  }
+  return avatarBytes;
+}
+
 function looksLikeRealVisitor(request, host) {
   const h = request.headers;
 
@@ -122,11 +143,12 @@ function looksLikeRealVisitor(request, host) {
 // One log entry per hit, shaped for the New Relic Log API: an array of log
 // objects, each with message / timestamp / attributes. Attribute names become
 // queryable NRQL fields.
-async function logHit(request, url, username) {
+async function logHit(request, url, trap, username) {
   const h = request.headers;
   const cf = request.cf || {};
   const hit = {
     event: "honeypot_hit",
+    trap: trap,
     host: url.hostname,
     path: url.pathname,
     username: username,
@@ -151,7 +173,7 @@ async function logHit(request, url, username) {
   // One readable line, so a plain log table is useful without opening the
   // attributes panel.
   const line =
-    `honeypot hit ${hit.host}${hit.path} | ip ${hit.ip} | ` +
+    `honeypot hit [${trap}] ${hit.host}${hit.path} | ip ${hit.ip} | ` +
     `asn ${hit.asn} ${hit.as_org} | ${hit.country}${hit.city ? " / " + hit.city : ""} | ` +
     `${hit.ua || "no user-agent"}`;
 
@@ -192,16 +214,14 @@ export default {
   async fetch(request) {
     const url = new URL(request.url);
     const host = url.hostname;
+    const path = url.pathname;
 
-    const match = url.pathname.match(/^\/u\/([^\/]+)\.json$/i);
-    if (!match) return fetch(request);
+    const profileMatch = CONFIG.PROFILE_TRAP
+      ? path.match(/^\/u\/([^\/]+)\.json$/i)
+      : null;
+    const avatarMatch = CONFIG.AVATAR_TRAP ? /^\/user_avatar\//i.test(path) : false;
 
-    let username = match[1];
-    try {
-      username = decodeURIComponent(username);
-    } catch (e) {
-      /* keep the raw form */
-    }
+    if (!profileMatch && !avatarMatch) return fetch(request);
 
     // Never touch a real visitor's session.
     if (looksLikeRealVisitor(request, host)) return fetch(request);
@@ -217,9 +237,30 @@ export default {
       if (real.status !== 404) return real;
     }
 
-    // Log the hit. A failed sink must never stop the fake response.
+    if (avatarMatch) {
+      if (CONFIG.NEW_RELIC_LICENSE_KEY || CONFIG.LOG_URL) {
+        await logHit(request, url, "avatar", "");
+      }
+      return new Response(getAvatarBytes(), {
+        status: 200,
+        headers: {
+          "content-type": "image/png",
+          "content-length": String(getAvatarBytes().length),
+          "cache-control": "no-store",
+          "x-honeypot": CONFIG.CANARY,
+        },
+      });
+    }
+
+    let username = profileMatch[1];
+    try {
+      username = decodeURIComponent(username);
+    } catch (e) {
+      /* keep the raw form */
+    }
+
     if (CONFIG.NEW_RELIC_LICENSE_KEY || CONFIG.LOG_URL) {
-      await logHit(request, url, username);
+      await logHit(request, url, "profile", username);
     }
 
     return new Response(JSON.stringify(fakeProfile(username, host)), {
