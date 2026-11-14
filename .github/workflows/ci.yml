@@ -25,6 +25,12 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      - name: Install dev dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Type-check the snippet
+        run: npm run typecheck
+
       - name: Syntax check the snippet
         run: node --check snippet/honeypot.js
 
